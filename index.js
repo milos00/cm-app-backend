@@ -39,6 +39,40 @@ app.post('/api/projects', async (req, res) => {
   }
 });
 
+// GET /api/projects/:id/packages
+app.get('/api/projects/:id/packages', async (req, res) => {
+  const projectId = req.params.id;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM construction_packages WHERE project_id = $1',
+      [projectId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Greška pri učitavanju paketa:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/projects/:id/packages
+app.post('/api/projects/:id/packages', async (req, res) => {
+  const projectId = req.params.id;
+  const { name, scope } = req.body;
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO construction_packages (project_id, name, scope)
+       VALUES ($1, $2, $3) RETURNING *`,
+      [projectId, name, scope]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Greška pri unosu paketa:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Start server
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);

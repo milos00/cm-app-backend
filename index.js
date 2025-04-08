@@ -111,6 +111,28 @@ app.post('/api/projects/:id/contractors', async (req, res) => {
   }
 });
 
+// PUT /api/packages/:id/assign-contractor
+app.put('/api/packages/:id/assign-contractor', async (req, res) => {
+  const packageId = req.params.id;
+  const { contractor_id } = req.body;
+
+  try {
+    const result = await pool.query(
+      `UPDATE construction_packages
+       SET contractor_id = $1
+       WHERE id = $2
+       RETURNING *`,
+      [contractor_id, packageId]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Greška pri dodeli izvođača paketu:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });

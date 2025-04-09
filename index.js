@@ -29,6 +29,24 @@ app.get('/api/projects', async (req, res) => {
   }
 });
 
+app.get('/api/projects/:id', async (req, res) => {
+  const projectId = req.params.id;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM projects WHERE id = $1',
+      [projectId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).send('Projekat nije pronađen');
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Greška pri dohvatanju projekta:', err);
+    res.status(500).send('Greška pri dohvatanju projekta');
+  }
+});
+
+
 app.post('/api/projects', async (req, res) => {
   const { name, location, description, start_date, end_date } = req.body;
   try {

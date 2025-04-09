@@ -245,46 +245,101 @@ app.post('/api/activities', async (req, res) => {
   }
 });
 
-// === ACTIVITY DEPENDENCIES ===
-
-app.get('/api/activities/:id/dependencies', async (req, res) => {
+app.put('/api/activities/:id', async (req, res) => {
   const activityId = req.params.id;
+  const { name, start_date, end_date, duration, contractor_id, package_id } = req.body;
+
   try {
     const result = await pool.query(
-      'SELECT * FROM activity_dependencies WHERE to_id = $1',
-      [activityId]
+      `UPDATE activities SET
+         name = $1,
+         start_date = $2,
+         end_date = $3,
+         duration = $4,
+         contractor_id = $5,
+         package_id = $6
+       WHERE id = $7 RETURNING *`,
+      [name, start_date, end_date, duration, contractor_id || null, package_id || null, activityId]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Greška pri izmeni aktivnosti:', err);
+    res.status(500).send('Greška pri izmeni aktivnosti');
+  }
+});
+
+app.delete('/api/activities/:id', async (req, res) => {
+  const activityId = req.params.id;
+  try {
+    await pool.query('DELETE FROM activity_dependencies WHERE to_id = $1 OR from_id = $1', [activityId]);
+    await pool.query('DELETE FROM daily_logs WHERE activity_id = $1', [activityId]);
+    await pool.query('DELETE FROM activities WHERE id = $1', [activityId]);
+    res.status(204).send();
+  } catch (err) {
+    console.error('Greška pri brisanju aktivnosti:', err);
+    res.status(500).send('Greška pri brisanju aktivnosti');
+  }
+});
+
+
+// === ACTIVITY DEPENDENCIES ===
+
+app.get('/api/projects/:id/dependencies', async (req, res) => {
+  const projectId = req.params.id;
+  try {
+    const result = await pool.query(
+      `SELECT * FROM activity_dependencies WHERE project_id = $1`,
+      [projectId]
     );
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Greška pri dohvatanju veza aktivnosti');
+    console.error('Greška pri dohvatanju veza po projektu:', err);
+    res.status(500).send('Greška pri dohvatanju zavisnosti');
   }
 });
 
-app.post('/api/activities/:id/dependencies', async (req, res) => {
-  const toId = req.params.id;
-  const { from_id, type } = req.body;
+
+app.post('/api/dependencies', async (req, res) => {
+  const { project_id, from_id, to_id, type } = req.body;
   try {
     const result = await pool.query(
-      `INSERT INTO activity_dependencies (from_id, to_id, type)
-       VALUES ($1, $2, $3) RETURNING *`,
-      [from_id, toId, type]
+      `INSERT INTO activity_dependencies (project_id, from_id, to_id, type)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [project_id, from_id, to_id, type]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Greška pri dodavanju veze');
+    console.error('Greška pri dodavanju zavisnosti:', err);
+    res.status(500).send('Greška pri dodavanju zavisnosti');
   }
 });
 
-app.delete('/api/activities/:id/dependencies/:depId', async (req, res) => {
-  const depId = req.params.depId;
+app.delete('/api/dependencies/:id', async (req, res) => {
+  const depId = req.params.id;
   try {
     await pool.query('DELETE FROM activity_dependencies WHERE id = $1', [depId]);
     res.status(204).send();
   } catch (err) {
-    console.error(err);
+    console.error('Greška pri brisanju veze:', err);
     res.status(500).send('Greška pri brisanju veze');
+  }
+});
+
+app.put('/api/dependencies/:id', async (req, res) => {
+  const depId = req.params.id;
+  const { from_id, to_id, type } = req.body;
+
+  try {
+    const result = await pool.query(
+      `UPDATE activity_dependencies
+       SET from_id = $1, to_id = $2, type = $3
+       WHERE id = $4 RETURNING *`,
+      [from_id, to_id, type, depId]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Greška pri izmeni zavisnosti:', err);
+    res.status(500).send('Greška pri izmeni zavisnosti');
   }
 });
 

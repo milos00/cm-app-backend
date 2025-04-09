@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
-require('dotenv').config();
 
 const app = express();
 const port = 4000;
@@ -14,19 +13,19 @@ const pool = new Pool({
   user: 'postgres',
   host: 'localhost',
   database: 'CM App',
-  password: process.env.DB_PASSWORD,
-  port: 5432,
+  password: 'Elesilisa2324', // zameni sa svojom lozinkom
+  port: 5432
 });
 
-// --- Projekti ---
+// === PROJECTS ===
 
 app.get('/api/projects', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM projects');
     res.json(result.rows);
   } catch (err) {
-    console.error('Greška pri dohvatanju projekata:', err);
-    res.status(500).json({ error: 'Server error' });
+    console.error(err);
+    res.status(500).send('Greška pri dohvatanju projekata');
   }
 });
 
@@ -34,18 +33,43 @@ app.post('/api/projects', async (req, res) => {
   const { name, location, description, start_date, end_date } = req.body;
   try {
     const result = await pool.query(
-      `INSERT INTO projects (name, location, description, start_date, end_date)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      'INSERT INTO projects (name, location, description, start_date, end_date) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [name, location, description, start_date, end_date]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error('Greška pri unosu projekta:', err);
-    res.status(500).json({ error: 'Server error' });
+    console.error(err);
+    res.status(500).send('Greška pri unosu projekta');
   }
 });
 
-// --- Construction Packages ---
+// === CONTRACTORS ===
+
+app.get('/api/projects/:id/contractors', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM contractors');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Greška pri dohvatanju izvođača');
+  }
+});
+
+app.post('/api/contractors', async (req, res) => {
+  const { name, contact_person, email, phone } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO contractors (name, contact_person, email, phone) VALUES ($1, $2, $3, $4) RETURNING *',
+      [name, contact_person, email, phone]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Greška pri unosu izvođača');
+  }
+});
+
+// === PACKAGES ===
 
 app.get('/api/projects/:id/packages', async (req, res) => {
   const projectId = req.params.id;
@@ -56,95 +80,67 @@ app.get('/api/projects/:id/packages', async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error('Greška pri dohvatanju paketa:', err);
-    res.status(500).json({ error: 'Server error' });
+    console.error(err);
+    res.status(500).send('Greška pri dohvatanju paketa');
   }
 });
 
 app.post('/api/projects/:id/packages', async (req, res) => {
   const projectId = req.params.id;
-  const { name, scope } = req.body;
+  const { name, description, scope } = req.body;
   try {
     const result = await pool.query(
-      `INSERT INTO construction_packages (project_id, name, scope)
-       VALUES ($1, $2, $3) RETURNING *`,
-      [projectId, name, scope]
+      'INSERT INTO construction_packages (project_id, name, description, scope) VALUES ($1, $2, $3, $4) RETURNING *',
+      [projectId, name, description, scope]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error('Greška pri unosu paketa:', err);
-    res.status(500).json({ error: 'Server error' });
+    console.error(err);
+    res.status(500).send('Greška pri unosu paketa');
   }
 });
 
 app.put('/api/packages/:id/assign-contractor', async (req, res) => {
-  const packageId = req.params.id;
   const { contractor_id } = req.body;
+  const packageId = req.params.id;
   try {
     const result = await pool.query(
-      `UPDATE construction_packages
-       SET contractor_id = $1
-       WHERE id = $2
-       RETURNING *`,
+      'UPDATE construction_packages SET contractor_id = $1 WHERE id = $2 RETURNING *',
       [contractor_id, packageId]
     );
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('Greška pri dodeli izvođača paketu:', err);
-    res.status(500).json({ error: 'Server error' });
+    console.error(err);
+    res.status(500).send('Greška pri dodeli izvođača');
   }
 });
 
-// --- Contractors ---
-
-app.get('/api/projects/:id/contractors', async (req, res) => {
-  const projectId = req.params.id;
-  try {
-    const result = await pool.query(
-      'SELECT * FROM contractors WHERE project_id = $1',
-      [projectId]
-    );
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Greška pri dohvatanju izvođača:', err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-app.post('/api/projects/:id/contractors', async (req, res) => {
-  const projectId = req.params.id;
-  const { name, contact_person, email, phone } = req.body;
-  try {
-    const result = await pool.query(
-      `INSERT INTO contractors (project_id, name, contact_person, email, phone)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [projectId, name, contact_person, email, phone]
-    );
-    res.status(201).json(result.rows[0]);
-  } catch (err) {
-    console.error('Greška pri unosu izvođača:', err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// --- Activities ---
+// === ACTIVITIES ===
 
 app.get('/api/projects/:id/activities', async (req, res) => {
   const projectId = req.params.id;
   try {
     const result = await pool.query(
-      'SELECT * FROM activities WHERE project_id = $1',
+      'SELECT * FROM activities WHERE project_id = $1 ORDER BY start_date',
       [projectId]
     );
     res.json(result.rows);
   } catch (err) {
-    console.error('Greška pri dohvatanju aktivnosti:', err);
-    res.status(500).json({ error: 'Server error' });
+    console.error(err);
+    res.status(500).send('Greška pri dohvatanju aktivnosti');
   }
 });
 
 app.post('/api/activities', async (req, res) => {
-  const { project_id, package_id, contractor_id, name, start_date, end_date, duration } = req.body;
+  const {
+    project_id,
+    package_id,
+    contractor_id,
+    name,
+    start_date,
+    end_date,
+    duration
+  } = req.body;
   try {
     const result = await pool.query(
       `INSERT INTO activities (project_id, package_id, contractor_id, name, start_date, end_date, duration)
@@ -153,30 +149,26 @@ app.post('/api/activities', async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error('Greška pri unosu aktivnosti:', err);
-    res.status(500).json({ error: 'Server error' });
+    console.error(err);
+    res.status(500).send('Greška pri unosu aktivnosti');
   }
 });
 
-app.put('/api/activities/:id', async (req, res) => {
+// === ACTIVITY DEPENDENCIES ===
+
+app.get('/api/activities/:id/dependencies', async (req, res) => {
   const activityId = req.params.id;
-  const { name, start_date, end_date, duration, contractor_id } = req.body;
   try {
     const result = await pool.query(
-      `UPDATE activities
-       SET name = $1, start_date = $2, end_date = $3, duration = $4, contractor_id = $5
-       WHERE id = $6
-       RETURNING *`,
-      [name, start_date, end_date, duration, contractor_id, activityId]
+      'SELECT * FROM activity_dependencies WHERE to_id = $1',
+      [activityId]
     );
-    res.json(result.rows[0]);
+    res.json(result.rows);
   } catch (err) {
-    console.error('Greška pri izmeni aktivnosti:', err);
-    res.status(500).json({ error: 'Server error' });
+    console.error(err);
+    res.status(500).send('Greška pri dohvatanju veza aktivnosti');
   }
 });
-
-// --- Activity Dependencies ---
 
 app.post('/api/activities/:id/dependencies', async (req, res) => {
   const toId = req.params.id;
@@ -189,22 +181,8 @@ app.post('/api/activities/:id/dependencies', async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error('Greška pri dodavanju zavisnosti:', err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-app.get('/api/activities/:id/dependencies', async (req, res) => {
-  const toId = req.params.id;
-  try {
-    const result = await pool.query(
-      'SELECT * FROM activity_dependencies WHERE to_id = $1',
-      [toId]
-    );
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Greška pri dohvatanju zavisnosti:', err);
-    res.status(500).json({ error: 'Server error' });
+    console.error(err);
+    res.status(500).send('Greška pri dodavanju veze');
   }
 });
 
@@ -214,10 +192,88 @@ app.delete('/api/activities/:id/dependencies/:depId', async (req, res) => {
     await pool.query('DELETE FROM activity_dependencies WHERE id = $1', [depId]);
     res.status(204).send();
   } catch (err) {
-    console.error('Greška pri brisanju zavisnosti:', err);
-    res.status(500).json({ error: 'Server error' });
+    console.error(err);
+    res.status(500).send('Greška pri brisanju veze');
   }
 });
+
+// === DAILY LOGS ===
+
+app.get('/api/activities/:id/daily-logs', async (req, res) => {
+  const activityId = req.params.id;
+  try {
+    const result = await pool.query(
+      `SELECT * FROM daily_logs WHERE activity_id = $1 ORDER BY log_date DESC`,
+      [activityId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Greška pri dohvatanju dnevnih logova');
+  }
+});
+
+app.post('/api/activities/:id/daily-logs', async (req, res) => {
+  const activityId = req.params.id;
+  const {
+    description,
+    progress_percentage,
+    supervisor_approved,
+    supervisor_comment
+  } = req.body;
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO daily_logs (activity_id, log_date, description, progress_percentage, supervisor_approved, supervisor_comment)
+       VALUES ($1, CURRENT_DATE, $2, $3, $4, $5) RETURNING *`,
+      [activityId, description, progress_percentage, supervisor_approved, supervisor_comment]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Greška pri unosu dnevnog loga');
+  }
+});
+
+app.put('/api/daily-logs/:id', async (req, res) => {
+  const logId = req.params.id;
+  const { progress_percentage, supervisor_approved, supervisor_comment } = req.body;
+
+  try {
+    const result = await pool.query(
+      `UPDATE daily_logs SET
+        progress_percentage = $1,
+        supervisor_approved = $2,
+        supervisor_comment = $3
+       WHERE id = $4 RETURNING *`,
+      [progress_percentage, supervisor_approved, supervisor_comment, logId]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).send('Log nije pronađen');
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Greška pri ažuriranju dnevnog loga');
+  }
+});
+
+app.delete('/api/daily-logs/:id', async (req, res) => {
+  const logId = req.params.id;
+
+  try {
+    const result = await pool.query('DELETE FROM daily_logs WHERE id = $1 RETURNING *', [logId]);
+    if (result.rowCount === 0) {
+      return res.status(404).send('Log nije pronađen');
+    }
+    res.status(204).send();
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Greška pri brisanju dnevnog loga');
+  }
+});
+
+// === SERVER START ===
 
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);

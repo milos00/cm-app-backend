@@ -54,6 +54,22 @@ app.delete('/api/projects/:id', async (req, res) => {
   }
 });
 
+app.put('/api/projects/:id', async (req, res) => {
+  const projectId = req.params.id;
+  const { name, location, description } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE projects SET name = $1, location = $2, description = $3 WHERE id = $4 RETURNING *`,
+      [name, location, description, projectId]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Greška pri izmeni projekta:', err);
+    res.status(500).send('Greška pri izmeni projekta');
+  }
+});
+
+
 
 // === CONTRACTORS ===
 

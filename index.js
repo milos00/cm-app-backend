@@ -380,6 +380,7 @@ app.get('/api/activities/:id/daily-logs', async (req, res) => {
 app.post('/api/activities/:id/daily-logs', async (req, res) => {
   const activityId = req.params.id;
   const {
+    log_date,
     description,
     progress_percentage,
     supervisor_approved,
@@ -389,8 +390,8 @@ app.post('/api/activities/:id/daily-logs', async (req, res) => {
   try {
     const result = await pool.query(
       `INSERT INTO daily_logs (activity_id, log_date, description, progress_percentage, supervisor_approved, supervisor_comment)
-       VALUES ($1, CURRENT_DATE, $2, $3, $4, $5) RETURNING *`,
-      [activityId, description, progress_percentage, supervisor_approved, supervisor_comment]
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [activityId, log_date, description, progress_percentage, supervisor_approved, supervisor_comment]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {

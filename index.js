@@ -43,14 +43,30 @@ app.post('/api/projects', async (req, res) => {
   }
 });
 
+app.delete('/api/projects/:id', async (req, res) => {
+  const projectId = req.params.id;
+  try {
+    await pool.query('DELETE FROM projects WHERE id = $1', [projectId]);
+    res.status(204).send();
+  } catch (err) {
+    console.error('Greška pri brisanju projekta:', err);
+    res.status(500).send('Greška pri brisanju projekta');
+  }
+});
+
+
 // === CONTRACTORS ===
 
 app.get('/api/projects/:id/contractors', async (req, res) => {
+  const projectId = req.params.id;
   try {
-    const result = await pool.query('SELECT * FROM contractors');
+    const result = await pool.query(
+      'SELECT * FROM contractors WHERE project_id = $1',
+      [projectId]
+    );
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    console.error('Greška pri dohvatanju izvođača po projektu:', err);
     res.status(500).send('Greška pri dohvatanju izvođača');
   }
 });

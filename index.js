@@ -160,6 +160,22 @@ app.delete('/api/packages/:id', async (req, res) => {
   }
 });
 
+app.put('/api/packages/:id', async (req, res) => {
+  const packageId = req.params.id;
+  const { name, scope } = req.body;
+
+  try {
+    const result = await pool.query(
+      `UPDATE construction_packages SET name = $1, scope = $2 WHERE id = $3 RETURNING *`,
+      [name, scope, packageId]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Greška pri izmeni paketa:', err);
+    res.status(500).send('Greška pri izmeni paketa');
+  }
+});
+
 
 // === ACTIVITIES ===
 

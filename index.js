@@ -88,11 +88,11 @@ app.get('/api/projects/:id/contractors', async (req, res) => {
 });
 
 app.post('/api/contractors', async (req, res) => {
-  const { name, contact_person, email, phone } = req.body;
+  const { name, contact_person, email, phone, project_id } = req.body;
   try {
     const result = await pool.query(
-      'INSERT INTO contractors (name, contact_person, email, phone) VALUES ($1, $2, $3, $4) RETURNING *',
-      [name, contact_person, email, phone]
+      'INSERT INTO contractors (name, contact_person, email, phone, project_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [name, contact_person, email, phone, project_id]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -100,6 +100,35 @@ app.post('/api/contractors', async (req, res) => {
     res.status(500).send('Greška pri unosu izvođača');
   }
 });
+
+
+app.put('/api/contractors/:id', async (req, res) => {
+  const contractorId = req.params.id;
+  const { name, contact_person, email, phone } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE contractors SET name = $1, contact_person = $2, email = $3, phone = $4 WHERE id = $5 RETURNING *`,
+      [name, contact_person, email, phone, contractorId]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Greška pri izmeni izvođača:', err);
+    res.status(500).send('Greška pri izmeni izvođača');
+  }
+});
+
+app.delete('/api/contractors/:id', async (req, res) => {
+  const contractorId = req.params.id;
+  try {
+    await pool.query('DELETE FROM contractors WHERE id = $1', [contractorId]);
+    res.status(204).send();
+  } catch (err) {
+    console.error('Greška pri brisanju izvođača:', err);
+    res.status(500).send('Greška pri brisanju izvođača');
+  }
+});
+
+
 
 // === PACKAGES ===
 

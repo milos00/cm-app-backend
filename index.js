@@ -131,6 +131,20 @@ app.put('/api/packages/:id/assign-contractor', async (req, res) => {
   }
 });
 
+app.delete('/api/packages/:id', async (req, res) => {
+  const packageId = req.params.id;
+  try {
+    // Ako imaš FK ka activities, moraš prvo obrisati sve aktivnosti iz paketa
+    await pool.query('DELETE FROM activities WHERE package_id = $1', [packageId]);
+    await pool.query('DELETE FROM construction_packages WHERE id = $1', [packageId]);
+    res.status(204).send();
+  } catch (err) {
+    console.error('Greška pri brisanju paketa:', err);
+    res.status(500).send('Greška pri brisanju paketa');
+  }
+});
+
+
 // === ACTIVITIES ===
 
 app.get('/api/projects/:id/activities', async (req, res) => {

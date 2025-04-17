@@ -386,19 +386,22 @@ app.get('/api/projects/:id/dependencies', async (req, res) => {
 
 
 app.post('/api/dependencies', async (req, res) => {
-  const { project_id, from_id, to_id, type } = req.body;
+  const { project_id, from_id, to_id, type, lag } = req.body;
+
   try {
     const result = await pool.query(
-      `INSERT INTO activity_dependencies (project_id, from_id, to_id, type)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [project_id, from_id, to_id, type]
+      `INSERT INTO activity_dependencies (project_id, from_id, to_id, type, lag)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [project_id, from_id, to_id, type, lag ?? 0]
     );
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error('Greška pri dodavanju zavisnosti:', err);
     res.status(500).send('Greška pri dodavanju zavisnosti');
   }
 });
+
 
 app.delete('/api/dependencies/:id', async (req, res) => {
   const depId = req.params.id;
@@ -413,14 +416,14 @@ app.delete('/api/dependencies/:id', async (req, res) => {
 
 app.put('/api/dependencies/:id', async (req, res) => {
   const depId = req.params.id;
-  const { from_id, to_id, type } = req.body;
+  const { type, lag } = req.body;
 
   try {
     const result = await pool.query(
       `UPDATE activity_dependencies
-       SET from_id = $1, to_id = $2, type = $3
-       WHERE id = $4 RETURNING *`,
-      [from_id, to_id, type, depId]
+       SET type = $1, lag = $2
+       WHERE id = $3 RETURNING *`,
+      [type, lag ?? 0, depId]
     );
     res.json(result.rows[0]);
   } catch (err) {
@@ -428,6 +431,7 @@ app.put('/api/dependencies/:id', async (req, res) => {
     res.status(500).send('Greška pri izmeni zavisnosti');
   }
 });
+
 
 // === AUTO SCHEDULE RUTA ===
 app.post('/api/projects/:id/auto-schedule', async (req, res) => {
@@ -458,7 +462,11 @@ app.post('/api/projects/:id/auto-schedule', async (req, res) => {
     }
 
     for (const dep of dependencies) {
-      adjacency.get(dep.from_id).push({ to_id: dep.to_id, type: dep.type });
+      adjacency.get(dep.from_id).push({
+        to_id: dep.to_id,
+        type: dep.type,
+        lag: dep.lag || 0
+      });
       inDegree.set(dep.to_id, inDegree.get(dep.to_id) + 1);
     }
 
@@ -468,101 +476,89 @@ app.post('/api/projects/:id/auto-schedule', async (req, res) => {
     }
 
     console.log('🔁 Pokrećem topološko sortiranje...');
-while (queue.length > 0) {
-  const currentId = queue.shift();
-  const current = activityMap.get(currentId);
-  const currentStart = parseDate(current.start_date);
-  const currentEnd = parseDate(current.end_date);
+    while (queue.length > 0) {
+      const currentId = queue.shift();
+      const current = activityMap.get(currentId);
+      const currentStart = parseDate(current.start_date);
+      const currentEnd = parseDate(current.end_date);
 
-  for (const dep of adjacency.get(currentId)) {
-    const dependent = activityMap.get(dep.to_id);
-    if (!dependent) continue;
+      for (const dep of adjacency.get(currentId)) {
+        const dependent = activityMap.get(dep.to_id);
+        if (!dependent) continue;
 
-    console.log(`⛓ ${dep.type} ${current.name} → ${dependent.name}`);
+        console.log(`⛓ ${dep.type} ${current.name} → ${dependent.name} (lag: ${dep.lag})`);
 
-    // === FS (Finish-to-Start) ===
-    if (dep.type === 'FS') {
-      const proposedStart = new Date(currentEnd);
-      proposedStart.setDate(proposedStart.getDate() + 1);
-const proposedStartStr = proposedStart.toISOString().split('T')[0];
-      const newEnd = calculateEndDate(proposedStartStr, dependent.duration);
+        // === FS (Finish-to-Start) ===
+        if (dep.type === 'FS') {
+          const proposedStart = new Date(currentEnd);
+          proposedStart.setDate(proposedStart.getDate() + 1 + dep.lag);
+          const proposedStartStr = proposedStart.toISOString().split('T')[0];
+          const newEnd = calculateEndDate(proposedStartStr, dependent.duration);
 
-      if (
-        !dependent.start_date ||
-        parseDate(dependent.start_date).getTime() !== proposedStart.getTime()
-      ) {
-        console.log(`📌 Ažuriram ${dependent.name}: FS start ${proposedStartStr} → ${newEnd}`);
-        dependent.start_date = proposedStartStr;
-        dependent.end_date = newEnd;
+          if (!dependent.start_date || parseDate(dependent.start_date).getTime() !== proposedStart.getTime()) {
+            console.log(`📌 Ažuriram ${dependent.name}: FS start ${proposedStartStr} → ${newEnd}`);
+            dependent.start_date = proposedStartStr;
+            dependent.end_date = newEnd;
+          }
+        }
+
+        // === SS (Start-to-Start) ===
+        if (dep.type === 'SS') {
+          const proposedStart = new Date(currentStart);
+          proposedStart.setDate(proposedStart.getDate() + dep.lag);
+          const proposedStartStr = proposedStart.toISOString().split('T')[0];
+          const newEnd = calculateEndDate(proposedStartStr, dependent.duration);
+
+          if (!dependent.start_date || parseDate(dependent.start_date).getTime() !== proposedStart.getTime()) {
+            console.log(`📌 Ažuriram ${dependent.name}: SS start ${proposedStartStr} → ${newEnd}`);
+            dependent.start_date = proposedStartStr;
+            dependent.end_date = newEnd;
+          }
+        }
+
+        // === FF (Finish-to-Finish) ===
+        if (dep.type === 'FF') {
+          const proposedEnd = new Date(currentEnd);
+          proposedEnd.setDate(proposedEnd.getDate() + dep.lag);
+          const proposedEndStr = proposedEnd.toISOString().split('T')[0];
+          const proposedStart = new Date(proposedEnd);
+          proposedStart.setDate(proposedEnd.getDate() - dependent.duration);
+          const proposedStartStr = proposedStart.toISOString().split('T')[0];
+
+          if (!dependent.end_date || parseDate(dependent.end_date).getTime() !== proposedEnd.getTime()) {
+            console.log(`📌 Ažuriram ${dependent.name}: FF end ${proposedEndStr}`);
+            dependent.start_date = proposedStartStr;
+            dependent.end_date = proposedEndStr;
+          }
+        }
+
+        inDegree.set(dep.to_id, inDegree.get(dep.to_id) - 1);
+        if (inDegree.get(dep.to_id) === 0) {
+          queue.push(dep.to_id);
+        }
       }
     }
 
-    // === SS (Start-to-Start) ===
-    if (dep.type === 'SS') {
-      const proposedStart = new Date(currentStart);
-const proposedStartStr = proposedStart.toLocaleDateString('sv-SE');
-      const newEnd = calculateEndDate(proposedStartStr, dependent.duration);
-
-      if (
-        !dependent.start_date ||
-        parseDate(dependent.start_date).getTime() !== proposedStart.getTime()
-      ) {
-        console.log(`📌 Ažuriram ${dependent.name}: SS start ${proposedStartStr} → ${newEnd}`);
-        dependent.start_date = proposedStartStr;
-        dependent.end_date = newEnd;
+    // Ažuriranje baze
+    for (const [id, updated] of activityMap.entries()) {
+      if (!updated.start_date || !updated.end_date || updated.start_date === '' || updated.end_date === '') {
+        console.log(`⚠️ Preskačem "${updated.name}" (id: ${id}) jer nema validne datume.`);
+        continue;
       }
+
+      const duration = calculateDuration(updated.start_date, updated.end_date);
+
+      await pool.query(
+        `UPDATE activities
+         SET start_date = $1,
+             end_date = $2,
+             duration = $3,
+             schedule_mode = 'auto'
+         WHERE id = $4`,
+        [updated.start_date, updated.end_date, duration, id]
+      );
     }
 
-    // === FF (Finish-to-Finish) ===
-    if (dep.type === 'FF') {
-      const proposedEnd = new Date(currentEnd);
-const proposedEndStr = proposedEnd.toLocaleDateString('sv-SE');
-      const proposedStart = new Date(proposedEnd);
-      proposedStart.setDate(proposedEnd.getDate() - dependent.duration);
-const proposedStartStr = proposedStart.toLocaleDateString('sv-SE');
-
-      if (
-        !dependent.end_date ||
-        parseDate(dependent.end_date).getTime() !== proposedEnd.getTime()
-      ) {
-        console.log(`📌 Ažuriram ${dependent.name}: FF end ${proposedEndStr}`);
-        dependent.start_date = proposedStartStr;
-        dependent.end_date = proposedEndStr;
-      }
-    }
-
-    // Reduce dependency count
-    inDegree.set(dep.to_id, inDegree.get(dep.to_id) - 1);
-    if (inDegree.get(dep.to_id) === 0) {
-      queue.push(dep.to_id);
-    }
-  }
-}
-
-    // 5. Ažuriranje baze
-for (const [id, updated] of activityMap.entries()) {
-  if (
-    !updated.start_date ||
-    !updated.end_date ||
-    updated.start_date === '' ||
-    updated.end_date === ''
-  ) {
-    console.log(`⚠️ Preskačem "${updated.name}" (id: ${id}) jer nema validne datume.`);
-    continue;
-  }
-
-  const duration = calculateDuration(updated.start_date, updated.end_date);
-
-await pool.query(
-  `UPDATE activities
-   SET start_date = $1,
-       end_date = $2,
-       duration = $3,
-       schedule_mode = 'auto'
-   WHERE id = $4`,
-  [updated.start_date, updated.end_date, duration, id]
-);
-}
     res.status(200).send('Auto Schedule završen uspešno.');
   } catch (err) {
     console.error('❌ Greška u auto schedule logici:', err);

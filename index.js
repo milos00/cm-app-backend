@@ -267,30 +267,34 @@ app.get('/api/projects/:id/activities', async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      'SELECT * FROM activities WHERE project_id = $1',
+      `SELECT 
+         a.*, 
+         c.name AS contractor_name,
+         p.name AS package_name
+       FROM activities a
+       LEFT JOIN contractors c ON a.contractor_id = c.id
+       LEFT JOIN construction_packages p ON a.package_id = p.id
+       WHERE a.project_id = $1`,
       [projectId]
     );
 
-const cleaned = rows.map((a) => ({
-  ...a,
-  start_date: typeof a.start_date === 'string'
-    ? a.start_date
-    : a.start_date?.toISOString().split('T')[0],
-  end_date: typeof a.end_date === 'string'
-    ? a.end_date
-    : a.end_date?.toISOString().split('T')[0],
-}));
+    const cleaned = rows.map((a) => ({
+      ...a,
+      start_date: typeof a.start_date === 'string'
+        ? a.start_date
+        : a.start_date?.toISOString().split('T')[0],
+      end_date: typeof a.end_date === 'string'
+        ? a.end_date
+        : a.end_date?.toISOString().split('T')[0],
+    }));
 
-
-    console.log('📦 Aktivnosti koje se šalju frontend-u:', cleaned);
-
+    console.log('📦 Aktivnosti sa JOIN-ovima koje se šalju frontend-u:', cleaned);
     res.json(cleaned);
   } catch (err) {
     console.error('Greška pri dohvatanju aktivnosti:', err);
     res.status(500).send('Greška pri dohvatanju aktivnosti');
   }
 });
-
 
 app.post('/api/activities', async (req, res) => {
   try {
@@ -506,7 +510,7 @@ app.post('/api/projects/:id/auto-schedule', async (req, res) => {
         if (dep.type === 'SS') {
           const proposedStart = new Date(currentStart);
           proposedStart.setDate(proposedStart.getDate() + dep.lag);
-          const proposedStartStr = proposedStart.toISOString().split('T')[0];
+          const proposedStartStr = proposedStart.toLocaleDateString('sv-SE');
           const newEnd = calculateEndDate(proposedStartStr, dependent.duration);
 
           if (!dependent.start_date || parseDate(dependent.start_date).getTime() !== proposedStart.getTime()) {
@@ -520,10 +524,10 @@ app.post('/api/projects/:id/auto-schedule', async (req, res) => {
         if (dep.type === 'FF') {
           const proposedEnd = new Date(currentEnd);
           proposedEnd.setDate(proposedEnd.getDate() + dep.lag);
-          const proposedEndStr = proposedEnd.toISOString().split('T')[0];
+          const proposedEndStr = proposedEnd.toLocaleDateString('sv-SE');
           const proposedStart = new Date(proposedEnd);
           proposedStart.setDate(proposedEnd.getDate() - dependent.duration);
-          const proposedStartStr = proposedStart.toISOString().split('T')[0];
+          const proposedStartStr = proposedStart.toLocaleDateString('sv-SE');
 
           if (!dependent.end_date || parseDate(dependent.end_date).getTime() !== proposedEnd.getTime()) {
             console.log(`📌 Ažuriram ${dependent.name}: FF end ${proposedEndStr}`);
